@@ -1,0 +1,3 @@
+(executable
+ (name mltokotlin)
+ (libraries compiler-libs.common))
