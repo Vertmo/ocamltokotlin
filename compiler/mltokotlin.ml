@@ -30,7 +30,12 @@ let type_prog file prog =
       Env.report_error Format.err_formatter e;
       exit 1
   in
-  Printtyped.implementation Format.std_formatter tp
+  Printtyped.implementation Format.err_formatter tp;
+  tp
+
+(** Parse, type and compile and OCaml file *)
+let compile f =
+  parse f |> type_prog f |> Compile.file
 
 (* Configure the ocaml flags *)
 let _ =
@@ -45,4 +50,4 @@ let _ =
   Arg.parse [] add_src usage;
 
   let f = List.hd !src in
-  parse f |> type_prog f
+  Print_kotlin.print_file Format.std_formatter (compile f)
