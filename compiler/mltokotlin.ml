@@ -21,16 +21,17 @@ let type_prog file prog =
       Typemod.type_implementation file "dummy_outputprefix" "dummy_modulename" env prog
     with
     | Typecore.Error (loc, env, err) ->
-      begin
         Typecore.report_error ~loc env err |>
         Location.print_report Format.err_formatter;
         exit 1
-      end
     | Env.Error e ->
       Env.report_error Format.err_formatter e;
       exit 1
+    | Typemod.Error (loc, env, err) ->
+      Typemod.report_error env Format.err_formatter err;
+      exit 1
   in
-  Printtyped.implementation Format.err_formatter tp;
+  (* Printtyped.implementation Format.err_formatter tp; *)
   tp
 
 (** Parse, type and compile and OCaml file *)

@@ -3,8 +3,16 @@
 (** For now we encode identifier as strings *)
 type ident = string
 
+type type_var = int
+
 type kotlin_type =
-  | Tint
+  | TypeBool
+  | TypeInt
+  | TypeDouble
+  | TypeString
+  | TypeUnit
+  | TypeVar of int
+  | FunctionType of kotlin_type list * kotlin_type
   (* TODO  *)
 
 type literalConstant =
@@ -13,35 +21,68 @@ type literalConstant =
   | HexLit of int
   | BinLit of int
   | RealLit of float
-  | Null
   | StringLit of string
+  (* | Null *)
+  | Unit
+
+type parameter = ident * kotlin_type
 
 (** Expression language *)
-type expression =
+type expr =
   | Literal of literalConstant
-  | Ident of ident
-  | FunCall of expression * expression list
+  | Ident of (ident * kotlin_type)
+  | FunCall of expr * expr list
+  | TypeArguments of expr * kotlin_type list
+  | AnonymousFun of parameter list * statement list
+  | Lambda of parameter list * statement list
   (* TODO *)
 
-(** In the subset of the language we use, we only assign to identifiers (for now ?) *)
-type assignment = (ident * expression)
-
-type parameter = kotlin_type * ident
-
-type statement =
-  | Assignment of assignment
-  | LoopStatement of loopstatement
-  | Expression of expression
-
-and loopstatement = unit (* TODO *)
+and statement =
+  | Expression of expr
+  | Assignment of ident * expr
+  (* | LoopStatement of loopstatement *)
+  | Return of expr
 
 and declaration =
   (* TODO *)
-  | FunctionDecl of ident * parameter list * statement list
-  | PropertyDecl of ident * expression
+  | FunctionDecl of type_var list * ident * parameter list * kotlin_type * statement list
+  | PropertyDecl of ident * kotlin_type * expr
 
 type file = {
   package_header : ident;
   imports : ident list;
   declarations : declaration list;
 }
+
+(** Get the type of a literal *)
+let type_of_lit = function
+  | BooleanLit _ -> TypeBool
+  | IntegerLit _ | HexLit _ | BinLit _ -> TypeInt
+  | RealLit _ -> TypeDouble
+  | StringLit _ -> TypeString
+  | Unit -> TypeUnit
+
+
+module TVarEnv = Map.Make(Int)
+let tvar_union = TVarEnv.union (fun _ ty1 _ -> Some ty1)
+
+(** Unify possibly polymorphic type [ty1] with instantiated type [ty2] *)
+let rec unify (ty1 : kotlin_type) (ty2 : kotlin_type) =
+  match ty1, ty2 with
+  | TypeVar x, _ -> TVarEnv.singleton x ty2
+  | FunctionType (tins1, tout1), FunctionType (tins2, tout2) ->
+    tvar_union (unifys tins1 tins2) (unify tout1 tout2)
+  | _, _ -> TVarEnv.empty
+and unifys tys1 tys2 =
+  List.fold_left2 (fun e ty1 ty2 -> tvar_union e (unify ty1 ty2)) TVarEnv.empty tys1 tys2
+
+module TVarSet = Set.Make(Int)
+
+(** Collect the type variables appearing in a kotlin_type *)
+let rec collect_type_vars = function
+  | TypeVar x -> TVarSet.singleton x
+  | FunctionType (tins, tout) ->
+    TVarSet.union (collect_types_vars tins) (collect_type_vars tout)
+  | _ -> TVarSet.empty
+and collect_types_vars tys =
+  List.fold_left (fun ps ty -> TVarSet.union ps (collect_type_vars ty)) TVarSet.empty tys

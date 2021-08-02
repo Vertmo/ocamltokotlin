@@ -2,8 +2,13 @@
 # OcamlToKotlin Tests
 #
 
-TESTS := hello.ml
+TESTS := \
+	hello.ml \
+	functions.ml \
+	lambda.ml
+
 KTs := $(TESTS:.ml=.kt)
+JAR := $(TESTS:.ml=.jar)
 
 all: $(KTs)
 
@@ -14,6 +19,6 @@ all: $(KTs)
 	kotlinc $^ -include-runtime -d $@
 
 clean:
-	rm -f *.kt
+	rm -rf *.kt *.jar META-INF
 
 # end
