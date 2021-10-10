@@ -9,9 +9,9 @@ TESTS := \
 	adt.ml
 
 KTs := $(TESTS:.ml=.kt)
-JAR := $(TESTS:.ml=.jar)
+JARs := $(TESTS:.ml=.jar)
 
-all: $(KTs)
+all: $(JARs)
 
 %.kt: %.ml
 	../_build/default/compiler/mltokotlin.exe $^ > $@

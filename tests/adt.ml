@@ -1,24 +1,19 @@
 external print_int : int -> unit = "print"
 
-type int_list =
+type 'a list =
   | Nil
-  | Cons of int * int_list
+  | Cons of 'a * 'a list
 
-let rec last (l : int_list) =
-  match l with
-  | Nil -> 0
-  | Cons (_ as hd1, Nil) -> hd1
-  | Cons (_, tl) -> last tl
-
-(** Partial match **)
-let rec last_part (l : int_list) =
+let rec last (l : 'a list) =
   match l with
   | Cons (_ as hd1, Nil) -> hd1
   | Cons (_, tl) -> last tl
+
+let ignore _ = ()
 
 let _ =
   print_int (last (Cons (1, Cons (2, Cons (3, Cons (4, Nil))))))(* ;
-   * print_int (last_part Nil) *)
+   * ignore (last Nil) *)
 
 (** Matching a constant **)
 let match_const x =

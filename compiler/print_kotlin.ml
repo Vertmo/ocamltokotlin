@@ -58,7 +58,7 @@ let print_constructor_parameter fmt (x, ty) =
     print_type ty
 
 let print_deleg fmt =
-  Option.fold ~none:(print_nothing fmt) ~some:(fprintf fmt "@ :@ %s()")
+  Option.fold ~none:(print_nothing fmt) ~some:(fprintf fmt "@ :@ %a()" print_user_type)
 
 let print_constructor fmt =
   Option.fold ~none:(print_nothing fmt)

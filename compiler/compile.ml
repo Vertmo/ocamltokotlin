@@ -15,7 +15,7 @@ let rec type_expr (ty : Types.type_expr) =
   | Tconstr (path, [], _) when Path.name path = "string" -> TypeString
   | Tconstr (path, [], _) when Path.name path = "int" -> TypeInt
   | Tconstr (path, [], _) when Path.name path = "bool" -> TypeBool
-  | Tconstr (path, _, _) -> UserType [(Path.name path, [(* TODO *)])]
+  | Tconstr (path, params, _) -> UserType [(Path.name path, List.map type_expr params)]
   | Tlink ty -> type_expr ty
   | _ -> Printtyp.raw_type_expr Format.std_formatter ty; failwith "TODO"
 
@@ -24,17 +24,20 @@ let constant = function
   | Asttypes.Const_string (s, _, _) -> StringLit s
   | _ -> todo "constant" ""
 
+let extract_user_type = function
+  | UserType ty -> ty
+  | _ -> invalid_arg "extract_user_type"
+
 let constructor constr params =
   match Types.(constr.cstr_name) with
   | "()" -> Literal Unit
   | "true" -> Literal (BooleanLit true)
   | "false" -> Literal (BooleanLit false)
   | name ->
-    let ty =
-      (match (type_expr constr.cstr_res) with
-       | UserType ty -> ty
-       | _ -> invalid_arg "constructor") in
-    ConstructorInvocation (ty@[(name, [])], params)
+    let ty = extract_user_type (type_expr constr.cstr_res) in
+    let ty = List.map (fun (x, _) -> (x, [])) ty in
+    let params = if params = [] then [Literal Unit] else params in
+    ConstructorInvocation (ty@[(name, [(* TODO? *)])], params)
 
 let rec longident (id : Longident.t) =
   (* TODO some import maybe ? *)
@@ -289,20 +292,26 @@ let value_binding (bind : value_binding) =
     else todo "value_binding" "Tpat_var"
   | _ -> todo "value_binding" "other"
 
-let constructor_declaration clid (decl : Types.constructor_declaration) : declaration =
+let constructor_declaration clty (decl : Types.constructor_declaration) : declaration =
   match decl.cd_args with
   | Cstr_tuple [] | Cstr_record [] ->
-    ObjectDecl {
-      objd_name = Ident.name decl.cd_id;
-      objd_deleg = Some clid;
-    }
-  | Cstr_tuple args ->
+    let tvars = List.of_seq (TVarSet.to_seq (collect_type_vars (UserType clty))) in
     ClassDecl {
       cld_modifs = [Data];
       cld_name = Ident.name decl.cd_id;
-      cld_tparams = [(* TODO? *)];
+      cld_tparams = tvars;
+      cld_constr = Some [("dummy", TypeUnit)];
+      cld_deleg = Some clty;
+      cld_body = []
+    }
+  | Cstr_tuple args ->
+    let tvars = List.of_seq (TVarSet.to_seq (collect_types_vars (UserType clty::List.map type_expr args))) in
+    ClassDecl {
+      cld_modifs = [Data];
+      cld_name = Ident.name decl.cd_id;
+      cld_tparams = tvars;
       cld_constr = Some (List.mapi (fun i ty -> "field"^(string_of_int i), type_expr ty) args);
-      cld_deleg = Some clid;
+      cld_deleg = Some clty;
       cld_body = []
     }
   | _ -> todo "constructor_declaration" "Cstr_record"
@@ -311,13 +320,16 @@ let type_declaration (decl : Typedtree.type_declaration) : declaration =
   match decl.typ_type.type_kind with
   | Types.Type_variant constrs ->
     let clid = Ident.name decl.typ_id in
+    let tparams = List.map (fun (ty, _) -> type_expr ty.ctyp_type) decl.typ_params in
+    let tvars = List.of_seq (TVarSet.to_seq (collect_types_vars tparams)) in
+    let clty = [(clid, List.map (fun x -> TypeVar x) tvars)] in
     ClassDecl {
       cld_modifs = [Sealed];
       cld_name = clid;
-      cld_tparams = [(* TODO? *)];
+      cld_tparams = tvars;
       cld_constr = None;
       cld_deleg = None;
-      cld_body = List.map (constructor_declaration clid) constrs
+      cld_body = List.map (constructor_declaration clty) constrs
     }
   | _ -> todo "type_declaration" "other"
 

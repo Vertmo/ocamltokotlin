@@ -92,13 +92,13 @@ and class_decl =
     cld_name : ident;
     cld_tparams : type_var list;
     cld_constr : (parameter list) option;
-    cld_deleg : ident option;
+    cld_deleg : user_type option;
     cld_body : declaration list;
   }
 
 and object_decl =
   { objd_name : ident;
-    objd_deleg : ident option;
+    objd_deleg : user_type option;
   }
 
 type file = {
@@ -135,6 +135,8 @@ let rec collect_type_vars = function
   | TypeVar x -> TVarSet.singleton x
   | FunctionType (tins, tout) ->
     TVarSet.union (collect_types_vars tins) (collect_type_vars tout)
+  | UserType ts ->
+    List.fold_left (fun ps (_, tys) -> TVarSet.union ps (collect_types_vars tys)) TVarSet.empty ts
   | _ -> TVarSet.empty
 and collect_types_vars tys =
   List.fold_left (fun ps ty -> TVarSet.union ps (collect_type_vars ty)) TVarSet.empty tys

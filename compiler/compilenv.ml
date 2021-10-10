@@ -33,8 +33,8 @@ let register_global x ty =
 let find_global x =
   Env.find x !global_env
 
-(** Local typing environnement for the Kotlin program *)
-
-type local_env = Kotlin.kotlin_type Env.t
-
-let find_type = Env.find
+(* (\** Local typing environnement for the Kotlin program *\)
+ *
+ * type local_env = Kotlin.kotlin_type Env.t
+ *
+ * let find_type = Env.find *)
