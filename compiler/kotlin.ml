@@ -13,7 +13,13 @@ type kotlin_type =
   | TypeUnit
   | TypeVar of int
   | FunctionType of kotlin_type list * kotlin_type
+  | UserType of user_type
   (* TODO  *)
+
+and simple_user_type = (ident * type_arguments)
+and user_type = simple_user_type list
+
+and type_arguments = kotlin_type list
 
 type literalConstant =
   | BooleanLit of bool
@@ -25,28 +31,75 @@ type literalConstant =
   (* | Null *)
   | Unit
 
+type binop =
+  | Conjunction
+  | Equality
+
 type parameter = ident * kotlin_type
+
+type classModifier =
+  | Data
+  | Sealed
 
 (** Expression language *)
 type expr =
   | Literal of literalConstant
   | Ident of (ident * kotlin_type)
   | FunCall of expr * expr list
-  | TypeArguments of expr * kotlin_type list
+  | TypeArguments of expr * type_arguments
   | AnonymousFun of parameter list * statement list
   | Lambda of parameter list * statement list
+  | When of expr option * whenEntry list
+  | BinOp of (binop * expr * expr)
+  | TypeTest of expr * kotlin_type
+  | Throw of expr
+  | MemberAccess of (expr * ident)
+  | ConstructorInvocation of (user_type * expr list)
   (* TODO *)
+
+and whenCondition =
+  | Expression of expr
+  | WhenTypeTest of kotlin_type
+
+and whenEntry =
+  | Condition of whenCondition list * statement list
+  | Else of statement list
 
 and statement =
   | Expression of expr
   | Assignment of ident * expr
   (* | LoopStatement of loopstatement *)
   | Return of expr
+  | Declaration of declaration
 
 and declaration =
   (* TODO *)
-  | FunctionDecl of type_var list * ident * parameter list * kotlin_type * statement list
+  | FunctionDecl of function_decl
   | PropertyDecl of ident * kotlin_type * expr
+  | ClassDecl of class_decl
+  | ObjectDecl of object_decl
+
+and function_decl =
+  { fund_tparams : type_var list;
+    fund_name : ident;
+    fund_params : parameter list;
+    fund_rettype : kotlin_type;
+    fund_body : statement list
+  }
+
+and class_decl =
+  { cld_modifs : classModifier list;
+    cld_name : ident;
+    cld_tparams : type_var list;
+    cld_constr : (parameter list) option;
+    cld_deleg : ident option;
+    cld_body : declaration list;
+  }
+
+and object_decl =
+  { objd_name : ident;
+    objd_deleg : ident option;
+  }
 
 type file = {
   package_header : ident;
@@ -61,7 +114,6 @@ let type_of_lit = function
   | RealLit _ -> TypeDouble
   | StringLit _ -> TypeString
   | Unit -> TypeUnit
-
 
 module TVarEnv = Map.Make(Int)
 let tvar_union = TVarEnv.union (fun _ ty1 _ -> Some ty1)

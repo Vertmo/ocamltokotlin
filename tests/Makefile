@@ -5,7 +5,8 @@
 TESTS := \
 	hello.ml \
 	functions.ml \
-	lambda.ml
+	lambda.ml \
+	adt.ml
 
 KTs := $(TESTS:.ml=.kt)
 JAR := $(TESTS:.ml=.jar)
