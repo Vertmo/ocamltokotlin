@@ -245,7 +245,7 @@ and function_args = function
 
 let is_function (expr : Typedtree.expression) =
   match expr.exp_desc with
-  | Texp_function { cases = [_] } -> true
+  | Texp_function _ -> true
   | _ -> false
 
 let rec expression_as_function (expr : Typedtree.expression) =
@@ -254,6 +254,12 @@ let rec expression_as_function (expr : Typedtree.expression) =
     let tx = type_expr pat.pat_type in
     let (stmts, body) = expression e in
     (Ident.name param, tx), stmts@[Return body], (type_expr (e.exp_type))
+  | Texp_function { param; cases } ->
+    let x = Ident.name param in
+    let tx = type_expr ((List.hd cases).c_lhs.pat_type) in
+    let retty =type_expr ((List.hd cases).c_rhs.exp_type) in
+    let cases = List.concat_map (match_value (Ident (x, tx))) cases in
+    (x, tx), [Return (When (None, add_else_case cases))], retty
   | _ -> invalid_arg "expression_as_function"
 
 let expression_as_main (expr : Typedtree.expression) =
