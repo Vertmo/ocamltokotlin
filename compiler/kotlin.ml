@@ -1,7 +1,7 @@
 (** ** Kotlin language *)
 
 (** For now we encode identifier as strings *)
-type ident = string
+type ident = Ident.t
 
 type type_var = int
 
@@ -44,7 +44,7 @@ type classModifier =
 (** Expression language *)
 type expr =
   | Literal of literalConstant
-  | Ident of (ident * kotlin_type)
+  | Ident of (Path.t * kotlin_type)
   | FunCall of expr * expr list
   | TypeArguments of expr * type_arguments
   | AnonymousFun of parameter list * statement list

@@ -14,11 +14,21 @@ let print_double_spaced_list p = print_separated_list " @ " p
 let print_comma_list p = print_separated_list ",@ " p
 let print_dot_list p = print_separated_list "." p
 
+let print_ident fmt id =
+  fprintf fmt "%s" (Ident.unique_name id)
+
+let rec print_path fmt = Path.(function (* TODO this is probably not correct with modules *)
+  | Pident id -> print_ident fmt id
+  | Pdot(p, s) -> Format.fprintf fmt "%a.%s" print_path p s
+  | Papply(p1, p2) -> Format.fprintf fmt "%a(%a)" print_path p1 print_path p2)
+
 let print_package_header fmt s =
-  fprintf fmt "@[<h 0>package %s;@]" s
+  fprintf fmt "@[<h 0>package %a;@]"
+    print_ident s
 
 let print_import fmt s =
-  fprintf fmt "@[<h 0>import %s;@]" s
+  fprintf fmt "@[<h 0>import %a;@]"
+    print_ident s
 
 let print_type_var fmt (t : type_var) =
   fprintf fmt "T%d" t
@@ -39,22 +49,20 @@ let rec print_type fmt = function
       print_user_type tys
 
 and print_simple_user_type fmt (name, tparams) =
-    fprintf fmt "%s%a"
-      name
+    fprintf fmt "%a%a"
+      print_ident name
       (if tparams = [] then (fun _ _ -> ())
       else (fun fmt -> fprintf fmt "<%a>" (print_comma_list print_type))) tparams
 and print_user_type fmt = print_dot_list print_simple_user_type fmt
 
-let print_ident fmt = fprintf fmt "%s"
-
 let print_parameter fmt (x, ty) =
-  fprintf fmt "%s : %a"
-    x
+  fprintf fmt "%a : %a"
+    print_ident x
     print_type ty
 
 let print_constructor_parameter fmt (x, ty) =
-  fprintf fmt "val %s : %a"
-    x
+  fprintf fmt "val %a : %a"
+    print_ident x
     print_type ty
 
 let print_deleg fmt =
@@ -91,7 +99,7 @@ let print_binop fmt = function
   | Equality -> fprintf fmt "=="
 
 let rec print_expression fmt = function
-  | Ident (x, _) -> fprintf fmt "%s" x
+  | Ident (x, _) -> print_path fmt x
   | Literal l -> print_literal fmt l
   | FunCall (e, params) ->
     fprintf fmt "@[<hov 2>%a(%a)@]"
@@ -154,7 +162,9 @@ and print_whenEntry fmt = function
 
 and print_statement fmt = function
   | Expression e -> fprintf fmt "%a" print_expression e
-  | Assignment (x, e) -> fprintf fmt "%s = %a" x print_expression e
+  | Assignment (x, e) -> fprintf fmt "%a = %a"
+                           print_ident x
+                           print_expression e
   | Return e -> fprintf fmt "return %a" print_expression e
   | Declaration d -> print_declaration fmt d
 
@@ -163,28 +173,28 @@ and print_statements fmt stmts =
 
 and print_declaration fmt = function
   | PropertyDecl (x,  ty, e) ->
-    fprintf fmt "@[<h 0>var %s : %a = %a@]"
-      x
+    fprintf fmt "@[<h 0>var %a : %a = %a@]"
+      print_ident x
       print_type ty
       print_expression e
   | FunctionDecl fd ->
-    fprintf fmt "@[<v 2>@[<h 0>fun@ %a%s(%a) : %a@] {@ %a@;<0 -2>}@]"
+    fprintf fmt "@[<v 2>@[<h 0>fun@ %a%a(%a) : %a@] {@ %a@;<0 -2>}@]"
       print_type_params fd.fund_tparams
-      fd.fund_name
+      print_ident fd.fund_name
       (print_comma_list print_parameter) fd.fund_params
       print_type fd.fund_rettype
       print_statements fd.fund_body
   | ClassDecl cd ->
-    fprintf fmt "@[<v 2>@[<h 0>%aclass@ %s%a%a%a@] {@ %a@;<0 -2>}@]"
+    fprintf fmt "@[<v 2>@[<h 0>%aclass@ %a%a%a%a@] {@ %a@;<0 -2>}@]"
       print_class_modifiers cd.cld_modifs
-      cd.cld_name
+      print_ident cd.cld_name
       print_type_params cd.cld_tparams
       print_constructor cd.cld_constr
       print_deleg cd.cld_deleg
       (print_double_spaced_list print_declaration) cd.cld_body
   | ObjectDecl od ->
-    fprintf fmt "@[<h 0>object@ %s%a@]"
-      od.objd_name
+    fprintf fmt "@[<h 0>object@ %a%a@]"
+      print_ident od.objd_name
       print_deleg od.objd_deleg
 
 let print_file fmt file =

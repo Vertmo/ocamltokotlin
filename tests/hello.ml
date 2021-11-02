@@ -1,7 +1,9 @@
-external print_endline : string -> unit = "println"
-
 let sender = "XOXO, OCaml"
 
 let _ =
-  print_endline "Hello Kotlin!";
+  PrintingLib.print_endline "Hello Kotlin!"
+
+open PrintingLib
+
+let _ =
   print_endline sender

@@ -1,54 +1,38 @@
 let usage = "./mltokotlin.exe <input>"
 
-let src = ref []
-
-let add_src f =
-  src := f::!src
-
-(** Parse a file and return the relevant program *)
-let parse file =
-  let cin = open_in file in
-  let p = cin |> Lexing.from_channel |> Parse.implementation in
-  close_in cin;
-  p
-
-(** Type a parsed program *)
-let type_prog file prog =
-  let (tp, _) =
-    try
-      Compmisc.init_path ~dir:"/dev/null" ();
-      let env = Compmisc.initial_env () in
-      Typemod.type_implementation file "dummy_outputprefix" "dummy_modulename" env prog
-    with
-    | Typecore.Error (loc, env, err) ->
-        Typecore.report_error ~loc env err |>
-        Location.print_report Format.err_formatter;
-        exit 1
-    | Env.Error e ->
-      Env.report_error Format.err_formatter e;
-      exit 1
-    | Typemod.Error (loc, env, err) ->
-      Typemod.report_error env Format.err_formatter err;
-      exit 1
-  in
-  (* Printtyped.implementation Format.err_formatter tp; *)
-  tp
-
-(** Parse, type and compile and OCaml file *)
-let compile f =
-  parse f |> type_prog f |> Compile.file
-
 (* Configure the ocaml flags *)
 let _ =
-  (* We dont want to generate the cmi interface (for now) *)
-  Clflags.dont_write_files := true;
   (* We dont use the ocaml stdlib, but a clone with the correct externals (and less features) *)
   Clflags.no_std_include := true;
   Clflags.nopervasives := true
 
+(* let src = ref []
+ *
+ * let add_src f =
+ *   src := f::!src *)
+
+let with_info =
+  Compile_common.with_info ~native:false ~tool_name:"ocamltokotlin" ~dump_ext:"cmo"
+
+(** Parse, type and compile and OCaml file *)
+let compile source_file =
+  let backend env typed =
+    Compilenv.set_env env;
+    let kf = Compile.file typed in
+    Print_kotlin.print_file Format.std_formatter kf
+  in
+  try
+    with_info ~source_file ~output_prefix:(Compenv.output_prefix source_file)
+    @@ fun info -> (
+      let pt = Compile_common.parse_impl info in
+      ignore (Compile_common.typecheck_impl info pt); (* produce cmi file TODO factorize with the other type check *)
+      let (typed, _, _, env) = Typemod.type_structure (Compile_common.(info.env)) pt in
+      backend env typed
+    )
+  with Env.Error _ | Typetexp.Error _ as exn ->
+    Location.report_exception Format.err_formatter exn; exit 2
+
 (* Entry point *)
 let _ =
-  Arg.parse [] add_src usage;
-
-  let f = List.hd !src in
-  Print_kotlin.print_file Format.std_formatter (compile f)
+  Arg.parse [] compile usage;
+  (* List.iter compile (List.rev !src) *)

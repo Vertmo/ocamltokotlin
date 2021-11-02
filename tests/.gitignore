@@ -3,6 +3,8 @@
 *.log
 tmp/
 
+*.cmi
+
 *.kt
 *.class
 *.jar

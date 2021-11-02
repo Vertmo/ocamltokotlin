@@ -4,6 +4,10 @@ open Utils
 open Typedtree
 open Kotlin
 
+let exnid = Ident.create_predef "Exception"
+let mainid = Ident.create_predef "main"
+let packageid = Ident.create_predef "mypackage"
+
 let todo func case = failwith (Printf.sprintf "TODO: %s : %s" func case)
 
 let rec type_expr (ty : Types.type_expr) =
@@ -15,7 +19,7 @@ let rec type_expr (ty : Types.type_expr) =
   | Tconstr (path, [], _) when Path.name path = "string" -> TypeString
   | Tconstr (path, [], _) when Path.name path = "int" -> TypeInt
   | Tconstr (path, [], _) when Path.name path = "bool" -> TypeBool
-  | Tconstr (path, params, _) -> UserType [(Path.name path, List.map type_expr params)]
+  | Tconstr (path, params, _) -> UserType [(Path.head path, List.map type_expr params)]
   | Tlink ty -> type_expr ty
   | _ -> Printtyp.raw_type_expr Format.std_formatter ty; failwith "TODO"
 
@@ -37,17 +41,12 @@ let constructor constr params =
     let ty = extract_user_type (type_expr constr.cstr_res) in
     let ty = List.map (fun (x, _) -> (x, [])) ty in
     let params = if params = [] then [Literal Unit] else params in
-    ConstructorInvocation (ty@[(name, [(* TODO? *)])], params)
+    ConstructorInvocation (ty@[(Ident.create_predef name, [(* TODO? *)])], params)
 
-let rec longident (id : Longident.t) =
-  (* TODO some import maybe ? *)
-  let id = Longident.last id in
-  Option.value (Compilenv.get_primitive_opt id) ~default:id
-
-let rec get_constr (ty : Types.type_expr) =
+let rec get_constr (ty : Types.type_expr) : Ident.t =
   match ty.desc with
   | Tlink ty -> get_constr ty
-  | Tconstr (c, _, _) -> Path.name c
+  | Tconstr (c, _, _) -> Path.head c
   | _ -> invalid_arg "get_constr"
 
 (** Bring the "or" case of the pattern matching up in the match.
@@ -101,15 +100,15 @@ and computation_pattern_distr_or pat : (computation general_pattern) list =
 let rec value_pattern (matched : expr) (pat : value general_pattern) : (expr list * statement list) =
   match pat.pat_desc with
   | Tpat_any -> [], []
-  | Tpat_var (_, x) -> [], [Declaration (PropertyDecl (x.txt, type_expr pat.pat_type, matched))]
-  | Tpat_alias (pat, _, x) ->
+  | Tpat_var (x, _) -> [], [Declaration (PropertyDecl (x, type_expr pat.pat_type, matched))]
+  | Tpat_alias (pat, x, _) ->
     let (conds, binds) = value_pattern matched pat in
-    conds, (Declaration (PropertyDecl (x.txt, type_expr pat.pat_type, matched)))::binds
+    conds, (Declaration (PropertyDecl (x, type_expr pat.pat_type, matched)))::binds
   | Tpat_constant cst ->
     [BinOp (Equality, matched, Literal (constant cst))], []
   | Tpat_construct (_, constr, vs) ->
-    let typetest = TypeTest (matched, UserType [(get_constr constr.cstr_res, []);(constr.cstr_name, [])]) in
-    let pats = List.mapi (fun i pat -> value_pattern (MemberAccess (matched, "field"^(string_of_int i))) pat) vs in
+    let typetest = TypeTest (matched, UserType [(get_constr constr.cstr_res, []);(Ident.create_predef constr.cstr_name, [])]) in
+    let pats = List.mapi (fun i pat -> value_pattern (MemberAccess (matched, Ident.create_predef ("field"^(string_of_int i)))) pat) vs in
     typetest::(List.concat_map fst pats), List.concat_map snd pats
   | Tpat_tuple _ -> todo "pattern" "tuple"
   | Tpat_variant _ -> todo "pattern" "variant"
@@ -145,14 +144,14 @@ let eta_expand e =
   | TypeArguments (Ident (x, FunctionType ([tx], _)), _) ->
     (try
        let _ = Compilenv.find_global x in
-       let tmp = Atom.fresh "tmp" in
-       Lambda ([(tmp, tx)], [Expression (FunCall (e, [Ident (tmp, tx)]))])
+       let tmp = Ident.create_local "tmp" in
+       Lambda ([(tmp, tx)], [Expression (FunCall (e, [Ident (Path.Pident tmp, tx)]))])
      with Not_found -> e)
   | _ -> e
 
 (** Generate the expression for throwing an exception with `msg` *)
 let throw_exception msg =
-  Throw (FunCall (Ident ("Exception", UserType [("Exception", [])]), [Literal (StringLit msg)]))
+  Throw (FunCall (Ident ((Path.Pident exnid), UserType [(exnid, [])]), [Literal (StringLit msg)]))
 
 let rec expression (expr : Typedtree.expression) =
   match expr.exp_desc with
@@ -166,8 +165,8 @@ let rec expression (expr : Typedtree.expression) =
     let (stmts2, args') = function_args args in
     stmts2, make_apply e' args'
     (* stmts2, FunCall (e', args') *)
-  | Texp_ident (_, ident, _) ->
-    let stmts, e = var (longident ident.txt) expr.exp_type in
+  | Texp_ident (pt, _, _) ->
+    let stmts, e = var pt expr.exp_type in
     stmts, eta_expand e
   | Texp_sequence (e1, e2) ->
     let stmts1, e1' = expression e1 and stmts2, e2' = expression e2 in
@@ -175,19 +174,18 @@ let rec expression (expr : Typedtree.expression) =
   | Texp_function { param; cases = [{ c_lhs = pat; c_guard = None; c_rhs = e }]} ->
     let tx = type_expr pat.pat_type in
     let (stmts1, e') = expression e in
-    [], Lambda ([(Ident.name param, tx)], stmts1@[Expression e'])
+    [], Lambda ([(param, tx)], stmts1@[Expression e'])
   | Texp_function { param; cases } ->
-    let x = Ident.name param in
     let tx = type_expr ((List.hd cases).c_lhs.pat_type) in
-    let cases = List.concat_map (match_value (Ident (x, tx))) cases in
-    [], Lambda ([(x, tx)], [Return (When (None, add_else_case cases))])
+    let cases = List.concat_map (match_value (Ident (Path.Pident param, tx))) cases in
+    [], Lambda ([(param, tx)], [Return (When (None, add_else_case cases))])
   (* TODO complete function *)
   | Texp_match (e, cases, part) ->
     let ty = type_expr e.exp_type in
     let stmts, e' = expression e in
-    let x = Atom.fresh "mat" in
+    let x = Ident.create_local "mat" in
     let assign = Declaration (PropertyDecl (x, ty, e')) in
-    let cases = List.concat_map (match_computation (Ident (x, ty))) cases in
+    let cases = List.concat_map (match_computation (Ident (Path.Pident x, ty))) cases in
     stmts@[assign],
     When (None, add_else_case cases)
 
@@ -220,21 +218,23 @@ and add_else_case = function
 
 and expression_as_call_head (expr : Typedtree.expression) =
   match expr.exp_desc with
-  | Texp_ident (_, ident, _) ->
-    var (longident ident.txt) expr.exp_type
+  | Texp_ident (pt, _, _) ->
+    var pt expr.exp_type
   | _ -> expression expr
 
-and var id ty =
+and var (id : Path.t) ty =
   let ty2 = type_expr ty in
-  let e' = Ident (id, ty2) in
-  try
-    let (params, ty1) = Compilenv.find_global id in
-    if params = [] then [], e'
-    else
-      let unienv = unify ty1 ty2 in
-      let toinst = List.of_seq (TVarSet.to_seq (collect_type_vars ty1)) in
-      [], TypeArguments (e', List.map (fun x -> TVarEnv.find x unienv) toinst)
-  with Not_found -> [], e'
+  match (Compilenv.get_primitive_opt id) with
+  | Some prim -> [], Ident (Path.Pident (Ident.create_predef prim), ty2)
+  | None ->
+    let e' = Ident (id, ty2) in
+    (try
+       let ty1 = type_expr (Compilenv.find_global id) in
+       let unienv = unify ty1 ty2 in
+       let toinst = List.of_seq (TVarSet.to_seq (collect_type_vars ty1)) in
+       if toinst = [] then [], e'
+       else [], TypeArguments (e', List.map (fun x -> TVarEnv.find x unienv) toinst)
+     with Not_found -> [], e')
 
 and function_args = function
   | [] -> [], []
@@ -253,17 +253,16 @@ let rec expression_as_function (expr : Typedtree.expression) =
   | Texp_function { param; cases = [{c_lhs = pat; c_guard = None; c_rhs = e} ] } ->
     let tx = type_expr pat.pat_type in
     let (stmts, body) = expression e in
-    (Ident.name param, tx), stmts@[Return body], (type_expr (e.exp_type))
+    (param, tx), stmts@[Return body], (type_expr (e.exp_type))
   | Texp_function { param; cases } ->
-    let x = Ident.name param in
     let tx = type_expr ((List.hd cases).c_lhs.pat_type) in
     let retty =type_expr ((List.hd cases).c_rhs.exp_type) in
-    let cases = List.concat_map (match_value (Ident (x, tx))) cases in
-    (x, tx), [Return (When (None, add_else_case cases))], retty
+    let cases = List.concat_map (match_value (Ident (Path.Pident param, tx))) cases in
+    (param, tx), [Return (When (None, add_else_case cases))], retty
   | _ -> invalid_arg "expression_as_function"
 
 let expression_as_main (expr : Typedtree.expression) =
-  let fid = Atom.fresh "main" in
+  let fid = Ident.create_local "main" in
   Compilenv.register_main fid;
   let (stmts, e) = expression expr in
   FunctionDecl {
@@ -278,35 +277,36 @@ let expression_as_main (expr : Typedtree.expression) =
 let value_binding (bind : value_binding) =
   match bind.vb_pat.pat_desc with
   | Tpat_any -> expression_as_main bind.vb_expr
-  | Tpat_var (_, f) when is_function bind.vb_expr ->
+  | Tpat_var (f, _) when is_function bind.vb_expr ->
     let (x, tx), stmts, retty = expression_as_function bind.vb_expr in
     let typarams = List.of_seq (TVarSet.to_seq (collect_types_vars (tx::retty::[]))) in
-    Compilenv.register_global f.txt (typarams, (FunctionType ([tx], retty)));
+    (* Compilenv.register_global f (typarams, (FunctionType ([tx], retty))); *)
     FunctionDecl {
       fund_tparams = typarams;
-      fund_name = f.txt;
+      fund_name = f;
       fund_params = [(x, tx)];
       fund_rettype = retty;
       fund_body = stmts
     }
-  | Tpat_var (_, x) ->
+  | Tpat_var (x, _) ->
     let stmts, e = expression bind.vb_expr in
     let ty = type_expr bind.vb_expr.exp_type in
     (* IDEA: In case we get some statements, we pack everything into a lambda *)
-    Compilenv.register_global x.txt ([], ty);
-    if stmts = [] then PropertyDecl (x.txt, ty, e)
+    (* Compilenv.register_global x ([], ty); *)
+    if stmts = [] then PropertyDecl (x, ty, e)
     else todo "value_binding" "Tpat_var"
   | _ -> todo "value_binding" "other"
 
 let constructor_declaration clty (decl : Types.constructor_declaration) : declaration =
+  let cld_name = Ident.create_predef (Ident.name decl.cd_id) in
   match decl.cd_args with
   | Cstr_tuple [] | Cstr_record [] ->
     let tvars = List.of_seq (TVarSet.to_seq (collect_type_vars (UserType clty))) in
     ClassDecl {
       cld_modifs = [Data];
-      cld_name = Ident.name decl.cd_id;
+      cld_name;
       cld_tparams = tvars;
-      cld_constr = Some [("dummy", TypeUnit)];
+      cld_constr = Some [(Ident.create_persistent "dummy", TypeUnit)];
       cld_deleg = Some clty;
       cld_body = []
     }
@@ -314,9 +314,9 @@ let constructor_declaration clty (decl : Types.constructor_declaration) : declar
     let tvars = List.of_seq (TVarSet.to_seq (collect_types_vars (UserType clty::List.map type_expr args))) in
     ClassDecl {
       cld_modifs = [Data];
-      cld_name = Ident.name decl.cd_id;
+      cld_name;
       cld_tparams = tvars;
-      cld_constr = Some (List.mapi (fun i ty -> "field"^(string_of_int i), type_expr ty) args);
+      cld_constr = Some (List.mapi (fun i ty -> Ident.create_predef ("field"^(string_of_int i)), type_expr ty) args);
       cld_deleg = Some clty;
       cld_body = []
     }
@@ -325,7 +325,7 @@ let constructor_declaration clty (decl : Types.constructor_declaration) : declar
 let type_declaration (decl : Typedtree.type_declaration) : declaration =
   match decl.typ_type.type_kind with
   | Types.Type_variant constrs ->
-    let clid = Ident.name decl.typ_id in
+    let clid = decl.typ_id in
     let tparams = List.map (fun (ty, _) -> type_expr ty.ctyp_type) decl.typ_params in
     let tvars = List.of_seq (TVarSet.to_seq (collect_types_vars tparams)) in
     let clty = [(clid, List.map (fun x -> TypeVar x) tvars)] in
@@ -344,29 +344,29 @@ let structure_item (st : Typedtree.structure_item) =
   match st.str_desc with
   | Tstr_value (_, vals) -> List.map value_binding vals
   | Tstr_eval (e, _) -> [expression_as_main e]
-  | Tstr_primitive ({ val_prim = [prim] } as desc) ->
-    Compilenv.register_primitive desc.val_name.txt prim; []
+  | Tstr_primitive _ -> []
   | Tstr_type (_, decls) ->
     List.map type_declaration decls
   | Tstr_attribute _ -> []
+  | Tstr_open _ -> [] (* TODO? *)
   | _ -> todo "structure_item" "other"
 
 let make_main () =
   let mains = Compilenv.get_mains () in
   FunctionDecl {
     fund_tparams = [];
-    fund_name = "main";
+    fund_name = mainid;
     fund_params = [];
     fund_rettype = TypeUnit;
     fund_body =
       List.map (fun f ->
           Expression
-            (FunCall (Ident (f, (FunctionType ([TypeUnit], TypeUnit))), []))
+            (FunCall (Ident (Path.Pident f, (FunctionType ([TypeUnit], TypeUnit))), []))
         ) mains
   }
 
 let file (st : structure) =
   let decls = List.concat_map structure_item st.str_items in
-  { package_header = "mypackage";
+  { package_header = packageid;
     imports = [];
     declarations = decls@[make_main ()]; }

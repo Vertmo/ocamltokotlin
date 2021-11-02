@@ -1,4 +1,4 @@
-external print_int : int -> unit = "print"
+open PrintingLib
 
 type 'a list =
   | Nil
@@ -13,12 +13,10 @@ let rec last2 = function
   | Cons (_ as hd1, Nil) -> hd1
   | Cons (_, tl) -> last tl
 
-let ignore _ = ()
-
 let _ =
   print_int (last (Cons (1, Cons (2, Cons (3, Cons (4, Nil))))));
-  print_int (last2 (Cons (1, Cons (2, Cons (3, Cons (4, Nil)))))) (* ;
-   * ignore (last Nil) *)
+  print_int (last2 (Cons (1, Cons (2, Cons (3, Cons (4, Nil))))));
+  print_int (last Nil)
 
 (** Matching a constant **)
 let match_const x =

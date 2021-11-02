@@ -13,13 +13,16 @@ JARs := $(TESTS:.ml=.jar)
 
 all: $(JARs)
 
-%.kt: %.ml
-	../_build/default/compiler/mltokotlin.exe $^ > $@
+%.kt: %.ml printingLib.cmi
+	../_build/default/compiler/mltokotlin.exe $< > $@
+
+%.cmi: %.ml
+	../_build/default/compiler/mltokotlin.exe $< > /dev/null
 
 %.jar: %.kt
 	kotlinc $^ -include-runtime -d $@
 
 clean:
-	rm -rf *.kt *.jar META-INF
+	rm -rf *.cmi *.kt *.jar META-INF
 
 # end

@@ -1,34 +1,25 @@
 (** Compiler environnement, mutable *)
 
+(** Set initial environment *)
+val set_env : Env.t -> unit
+
 (** Main functions *)
 
 (** Register a new function that will be called from main *)
-val register_main : string -> unit
+val register_main : Ident.t -> unit
 
 (** Get all the functions registered to be called from main *)
-val get_mains : unit -> string list
+val get_mains : unit -> Ident.t list
 
 (** Primitives *)
 
-(** Register a new primitive *)
-val register_primitive : string -> string -> unit
+(* (\** Register a primitive *\)
+ * val register_primitive : Path.t -> string -> unit *)
 
 (** Get a primitive if it exists *)
-val get_primitive_opt : string -> string option
+val get_primitive_opt : Path.t -> string option
 
-(** Global typing environnement for the Kotlin program *)
+(** Typing environnement for the Kotlin program *)
 
-(** Register a type in the global environnement *)
-val register_global : string -> Kotlin.type_var list * Kotlin.kotlin_type -> unit
-
-(** Find a type in the global environnement *)
-val find_global : string -> Kotlin.type_var list * Kotlin.kotlin_type
-
-(* (\** Local typing environnement for the Kotlin program *\)
- * type local_env
- *
- * (\** Find a type in the local typing environnement *\)
- * val find_local_type : string -> local_env -> Kotlin.kotlin_type
- *
- * (\** Add a type in the local typing environnement *\)
- * val add_local_type : string -> Kotlin.kotlin_type -> local_env -> local_env *)
+(** Find a global value in the environnement *)
+val find_global : Path.t -> Types.type_expr
