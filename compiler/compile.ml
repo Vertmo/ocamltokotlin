@@ -64,8 +64,8 @@ let rec value_pattern_distr_or pat : (value general_pattern) list =
   | Tpat_any | Tpat_var _ | Tpat_constant _ | Tpat_variant (_, None, _) -> [pat]
   | Tpat_alias (p, id, x) ->
     List.map (fun p -> { pat with pat_desc = Tpat_alias (p, id, x) }) (value_pattern_distr_or p)
-  | Tpat_construct (x, constr, pats) ->
-    List.map (fun pats -> { pat with pat_desc = Tpat_construct (x, constr, pats) }) (value_patterns_distr_or pats)
+  | Tpat_construct (x, constr, pats, tys) ->
+    List.map (fun pats -> { pat with pat_desc = Tpat_construct (x, constr, pats, tys) }) (value_patterns_distr_or pats)
   | Tpat_tuple pats ->
     List.map (fun pats -> { pat with pat_desc = Tpat_tuple pats }) (value_patterns_distr_or pats)
   | Tpat_variant (lab, Some p, row) ->
@@ -106,7 +106,7 @@ let rec value_pattern (matched : expr) (pat : value general_pattern) : (expr lis
     conds, (Declaration (PropertyDecl (x, type_expr pat.pat_type, matched)))::binds
   | Tpat_constant cst ->
     [BinOp (Equality, matched, Literal (constant cst))], []
-  | Tpat_construct (_, constr, vs) ->
+  | Tpat_construct (_, constr, vs, _) ->
     let typetest = TypeTest (matched, UserType [(get_constr constr.cstr_res, []);(Ident.create_predef constr.cstr_name, [])]) in
     let pats = List.mapi (fun i pat -> value_pattern (MemberAccess (matched, Ident.create_predef ("field"^(string_of_int i)))) pat) vs in
     typetest::(List.concat_map fst pats), List.concat_map snd pats
@@ -324,7 +324,7 @@ let constructor_declaration clty (decl : Types.constructor_declaration) : declar
 
 let type_declaration (decl : Typedtree.type_declaration) : declaration =
   match decl.typ_type.type_kind with
-  | Types.Type_variant constrs ->
+  | Types.Type_variant (constrs, _) ->
     let clid = decl.typ_id in
     let tparams = List.map (fun (ty, _) -> type_expr ty.ctyp_type) decl.typ_params in
     let tvars = List.of_seq (TVarSet.to_seq (collect_types_vars tparams)) in
