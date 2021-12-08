@@ -103,7 +103,7 @@ and object_decl =
 
 type file = {
   package_header : ident;
-  imports : ident list;
+  imports : (ident list) list;
   declarations : declaration list;
 }
 

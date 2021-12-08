@@ -15,12 +15,15 @@ let print_comma_list p = print_separated_list ",@ " p
 let print_dot_list p = print_separated_list "." p
 
 let print_ident fmt id =
-  fprintf fmt "%s" (Ident.unique_name id)
+  fprintf fmt "%s" (Ident.name id)
 
-let rec print_path fmt = Path.(function (* TODO this is probably not correct with modules *)
-  | Pident id -> print_ident fmt id
-  | Pdot(p, s) -> Format.fprintf fmt "%a.%s" print_path p s
-  | Papply(p1, p2) -> Format.fprintf fmt "%a(%a)" print_path p1 print_path p2)
+let rec print_path fmt p =
+  (* TODO this is probably not correct with modules *)
+  Format.fprintf fmt "%s" (Path.last p)
+  (* Path.(function *)
+  (* | Pident id -> print_ident fmt id *)
+  (* | Pdot(p, s) -> Format.fprintf fmt "%a.%s" print_path p s *)
+  (* | Papply(p1, p2) -> Format.fprintf fmt "%a(%a)" print_path p1 print_path p2) *)
 
 let print_package_header fmt s =
   fprintf fmt "@[<h 0>package %a;@]"
@@ -28,7 +31,7 @@ let print_package_header fmt s =
 
 let print_import fmt s =
   fprintf fmt "@[<h 0>import %a;@]"
-    print_ident s
+    (print_dot_list print_ident) s
 
 let print_type_var fmt (t : type_var) =
   fprintf fmt "T%d" t

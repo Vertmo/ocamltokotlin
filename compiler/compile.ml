@@ -262,7 +262,7 @@ let rec expression_as_function (expr : Typedtree.expression) =
   | _ -> invalid_arg "expression_as_function"
 
 let expression_as_main (expr : Typedtree.expression) =
-  let fid = Ident.create_local "main" in
+  let fid = Ident.create_persistent (Atom.fresh "main") in
   Compilenv.register_main fid;
   let (stmts, e) = expression expr in
   FunctionDecl {
@@ -368,5 +368,5 @@ let make_main () =
 let file (st : structure) =
   let decls = List.concat_map structure_item st.str_items in
   { package_header = packageid;
-    imports = [];
+    imports = [[packageid;Ident.create_predef "*"]];
     declarations = decls@[make_main ()]; }
